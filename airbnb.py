@@ -9,9 +9,9 @@ class Airbnb(BaseModel):
     picture_url: str
     property_type: str
     house_rules:dict
-    reviewCount: int
+    totalReviews: int
     categoryRating: list[dict[str, str | float]]
-    title: dict[str, list[str] | str]
+    roomdetails: dict[str, list[str] | str]
     AmenitiesGroup: list[dict[str, object]]  # <-- flexible dict
     description: str
     hostdata: dict[str, str | list | dict]
@@ -38,7 +38,7 @@ def proceess_data(data):
         s_dict["Name"] = b.get("name")
         s_dict["picture_url"] = b.get("pictureUrl")
         s_dict["property_type"] = b.get("propertyType")
-        s_dict["reviewCount"] = b.get("reviewCount")
+        s_dict["totalReviews"] = b.get("reviewCount")
         house_rules = {"checkIn": None, "checkout": None, "title": None}
         for sec in sections_path:
             section_data = sec.get("section")
@@ -50,7 +50,7 @@ def proceess_data(data):
                     if not isinstance(item, dict):
                         continue
                     title = item.get("title")
-                    if title:  # remove unwanted unicode characters
+                    if title:
                         title = title.replace("\u202f", " ").replace("\u00a0", " ")
                     if idx == 0:
                         house_rules["checkIn"] = title
@@ -90,8 +90,10 @@ def proceess_data(data):
         for item in overview_items:
             if isinstance(item, dict):
                 overview_titles.append(item.get("title"))
-    s_dict["title"] = {
-        "roomtitle": room_data.get("title"),
+    s_dict["roomdetails"] = {
+        # "roomtitle": room_data.get("title"),
+        "city":room_data.get("title")[8:12],
+        "country":room_data.get("title")[19:24],
         "overviewitems": overview_titles
     }
     s_dict["AmenitiesGroup"] = []
