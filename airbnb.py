@@ -1,8 +1,14 @@
-
 import json
+import mysql.connector
 from pydantic import BaseModel
 from datetime import datetime
 
+conn = mysql.connector.connect(
+            host="localhost",
+            user="root",
+            password="actowiz",      # 🔁 change if your password is different
+            database="airbnb_db"     # 🔁 make sure this database exists
+        )
 class Airbnb(BaseModel):
     Listing_id: str
     Name: str
@@ -25,7 +31,12 @@ def proceess_data(data):
     base_path = data.get("niobeClientData", [])[0][1]
     section_path = base_path.get("data", {}).get("presentation", {}).get("stayProductDetailPage", {}).get("sections", {})
     sections_path = section_path.get("sections", [])
-    room_data= section_path.get("sbuiData").get("sectionConfiguration",{}).get("root",{}).get("sections")[1].get("sectionData")
+    sbui = section_path.get("sbuiData", {})
+    root_sections = sbui.get("sectionConfiguration", {}).get("root", {}).get("sections", [])
+
+    room_data = {}
+    if len(root_sections) > 1:
+        room_data = root_sections[1].get("sectionData", {})
     for i in sections_path:
         section_path = i.get("section")
         if not isinstance(section_path, dict):
@@ -156,7 +167,199 @@ def write_file(file):
     with open(f"Air_bnb_{file_name}.json", "w") as f:
         json.dump(file.model_dump(), f, indent=4)
 
-user_file_input =r"C:\Users\vishal.mistry\Desktop\Mistry Vishal\airbnb\air_bnb.json"
+
+
+
+def create_tables(conn):
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS listings (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        listing_id VARCHAR(50) UNIQUE,
+        name VARCHAR(255),
+        picture_url TEXT,
+        property_type VARCHAR(150),
+        city VARCHAR(100),
+        country VARCHAR(100),
+        description LONGTEXT,
+        total_reviews INT,
+        checkin_time VARCHAR(100),
+        checkout_time VARCHAR(100),
+        guest_limit VARCHAR(100),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS hosts (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        listing_id VARCHAR(50),
+        hostname VARCHAR(150),
+        user_id VARCHAR(255),
+        host_reviews INT,
+        host_rating DECIMAL(3,2),
+        year_hosting INT,
+        FOREIGN KEY (listing_id) REFERENCES listings(listing_id) ON DELETE CASCADE
+    )
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS category_ratings (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        listing_id VARCHAR(50),
+        category_type VARCHAR(100),
+        category_rating DECIMAL(2,1),
+        FOREIGN KEY (listing_id) REFERENCES listings(listing_id) ON DELETE CASCADE
+    )
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS amenities (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        listing_id VARCHAR(50),
+        service_title VARCHAR(150),
+        amenity_name VARCHAR(150),
+        FOREIGN KEY (listing_id) REFERENCES listings(listing_id) ON DELETE CASCADE
+    )
+    """)
+       # 5️⃣ Media Images Table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS media_images (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        listing_id VARCHAR(50),
+        image_url TEXT,
+        FOREIGN KEY (listing_id) REFERENCES listings(listing_id) ON DELETE CASCADE
+    )
+    """)
+
+    # 6️⃣ Co-Hosts Table
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS co_hosts (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        listing_id VARCHAR(50),
+        co_host_name VARCHAR(150),
+        co_host_user_id VARCHAR(255),
+        FOREIGN KEY (listing_id) REFERENCES listings(listing_id) ON DELETE CASCADE
+    )
+    """)
+
+    conn.commit()
+    cursor.close()
+def insert_listing_data(conn, data):
+    cursor = conn.cursor()
+
+    # -------------------------
+    # 1️⃣ Insert into listings
+    # -------------------------
+    cursor.execute("""
+        INSERT IGNORE INTO listings
+        (listing_id, name, picture_url, property_type,
+         description, total_reviews, checkin_time, checkout_time)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+    """, (
+        data.get("Listing_id"),
+        data.get("Name"),
+        data.get("picture_url"),
+        data.get("property_type"),
+        data.get("description"),
+        data.get("totalReviews"),
+        data.get("house_rules", {}).get("checkIn"),
+        data.get("house_rules", {}).get("checkout")
+    ))
+
+    # -------------------------
+    # 2️⃣ Insert into hosts
+    # -------------------------
+    host = data.get("hostdata", {})
+
+    if host:
+        cursor.execute("""
+            INSERT IGNORE INTO hosts
+            (listing_id, hostname, user_id,
+             host_reviews, host_rating, year_hosting)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (
+            data.get("Listing_id"),
+            host.get("hostname"),
+            host.get("user_id"),
+            host.get("host_reviews"),
+            host.get("host_rating"),
+            host.get("year_hosting")
+        ))
+
+    # -------------------------
+    # 3️⃣ Insert into category_ratings
+    # -------------------------
+    for rating in data.get("categoryRating", []):
+        cursor.execute("""
+            INSERT INTO category_ratings
+            (listing_id, category_type, category_rating)
+            VALUES (%s, %s, %s)
+        """, (
+            data.get("Listing_id"),
+            rating.get("categoryType"),
+            rating.get("categoryRating")
+        ))
+
+    # -------------------------
+    # 4️⃣ Insert into amenities
+    # -------------------------
+    for group in data.get("AmenitiesGroup", []):
+        service_title = group.get("service_title")
+
+        for amenity in group.get("amenities", []):
+            cursor.execute("""
+                INSERT INTO amenities
+                (listing_id, service_title, amenity_name)
+                VALUES (%s, %s, %s)
+            """, (
+                data.get("Listing_id"),
+                service_title,
+                amenity
+            ))
+        # -------------------------
+    # 5️⃣ Insert into media_images
+    # -------------------------
+    for image in data.get("media_image", []):
+        cursor.execute("""
+            INSERT INTO media_images
+            (listing_id, image_url)
+            VALUES (%s, %s)
+        """, (
+            data.get("Listing_id"),
+            image
+        ))
+    
+        # -------------------------
+    # 6️⃣ Insert into co_hosts
+    # -------------------------
+    host = data.get("hostdata", {})
+    for co_host in host.get("co-host", []):
+        cursor.execute("""
+            INSERT INTO co_hosts
+            (listing_id, co_host_name, co_host_user_id)
+            VALUES (%s, %s, %s)
+        """, (
+            data.get("Listing_id"),
+            co_host.get("co_host_name"),
+            co_host.get("co_host_user_id")
+        ))
+
+    conn.commit()
+    cursor.close()
+
+
+user_file_input = r"C:\Users\vishal.mistry\Desktop\Mistry Vishal\airbnb\air_bnb.json"
+
 s = input_data(user_file_input)
-a=proceess_data(s)
-write_file(a)
+
+processed_data = proceess_data(s)
+
+write_file(processed_data)
+
+create_tables(conn)
+
+insert_listing_data(conn, processed_data.model_dump())
+
+conn.close()
