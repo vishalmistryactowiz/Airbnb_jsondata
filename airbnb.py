@@ -6,8 +6,8 @@ from datetime import datetime
 conn = mysql.connector.connect(
             host="localhost",
             user="root",
-            password="actowiz",      # 🔁 change if your password is different
-            database="airbnb_db"     # 🔁 make sure this database exists
+            password="actowiz",      
+            database="airbnb_db"     
         )
 class Airbnb(BaseModel):
     Listing_id: str
@@ -167,9 +167,6 @@ def write_file(file):
     with open(f"Air_bnb_{file_name}.json", "w") as f:
         json.dump(file.model_dump(), f, indent=4)
 
-
-
-
 def create_tables(conn):
     cursor = conn.cursor()
 
@@ -223,7 +220,7 @@ def create_tables(conn):
         FOREIGN KEY (listing_id) REFERENCES listings(listing_id) ON DELETE CASCADE
     )
     """)
-       # 5️⃣ Media Images Table
+    
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS media_images (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -233,7 +230,6 @@ def create_tables(conn):
     )
     """)
 
-    # 6️⃣ Co-Hosts Table
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS co_hosts (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -248,10 +244,6 @@ def create_tables(conn):
     cursor.close()
 def insert_listing_data(conn, data):
     cursor = conn.cursor()
-
-    # -------------------------
-    # 1️⃣ Insert into listings
-    # -------------------------
     cursor.execute("""
         INSERT IGNORE INTO listings
         (listing_id, name, picture_url, property_type,
@@ -267,10 +259,6 @@ def insert_listing_data(conn, data):
         data.get("house_rules", {}).get("checkIn"),
         data.get("house_rules", {}).get("checkout")
     ))
-
-    # -------------------------
-    # 2️⃣ Insert into hosts
-    # -------------------------
     host = data.get("hostdata", {})
 
     if host:
@@ -287,10 +275,6 @@ def insert_listing_data(conn, data):
             host.get("host_rating"),
             host.get("year_hosting")
         ))
-
-    # -------------------------
-    # 3️⃣ Insert into category_ratings
-    # -------------------------
     for rating in data.get("categoryRating", []):
         cursor.execute("""
             INSERT INTO category_ratings
@@ -301,10 +285,6 @@ def insert_listing_data(conn, data):
             rating.get("categoryType"),
             rating.get("categoryRating")
         ))
-
-    # -------------------------
-    # 4️⃣ Insert into amenities
-    # -------------------------
     for group in data.get("AmenitiesGroup", []):
         service_title = group.get("service_title")
 
@@ -318,9 +298,6 @@ def insert_listing_data(conn, data):
                 service_title,
                 amenity
             ))
-        # -------------------------
-    # 5️⃣ Insert into media_images
-    # -------------------------
     for image in data.get("media_image", []):
         cursor.execute("""
             INSERT INTO media_images
@@ -331,9 +308,6 @@ def insert_listing_data(conn, data):
             image
         ))
     
-        # -------------------------
-    # 6️⃣ Insert into co_hosts
-    # -------------------------
     host = data.get("hostdata", {})
     for co_host in host.get("co-host", []):
         cursor.execute("""
